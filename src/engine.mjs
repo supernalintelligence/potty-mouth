@@ -89,9 +89,17 @@ const REFUSAL_TIERS = [
 // the confusing part was giving no clue what actually happened. A generic
 // random refusal doesn't help here; naming the loop explicitly does.
 const SELF_REFERENCE_SIGNATURE = 'UserPromptSubmit operation blocked by hook';
+// Required alongside the header above, not on its own — a plain substring
+// check on the header text alone false-positives on any organic complaint
+// that happens to mention it (e.g. "this fucking UserPromptSubmit blocked
+// by hook thing is annoying" was never actually blocked before). Both
+// real incidents had this "Original prompt:" echo present too, so
+// requiring both cuts the false-positive surface substantially without a
+// heavier resubmission-tracking mechanism.
+const SELF_REFERENCE_ECHO = 'Original prompt:';
 
 function pickRefusal(sessionBlocks, promptText) {
-  if (promptText.includes(SELF_REFERENCE_SIGNATURE)) {
+  if (promptText.includes(SELF_REFERENCE_SIGNATURE) && promptText.includes(SELF_REFERENCE_ECHO)) {
     return "That's a previous rejection notice, pasted back in — not a new message. " +
       'Retype what you actually meant to say, without copying the notice text along with it.';
   }

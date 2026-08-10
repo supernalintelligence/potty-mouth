@@ -13,7 +13,15 @@ export function makeClaudeShapedInstaller({ configPath, eventName, command, mark
   function readConfig() {
     const file = configPath();
     try {
-      return JSON.parse(fs.readFileSync(file, 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      // A pre-existing config that parses but isn't a plain object (an
+      // array, a string, null, a number) would otherwise crash on
+      // `config.hooks ??= {}` or silently drop the write — treat it the
+      // same as unparseable: start fresh rather than corrupt or crash.
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return {};
+      }
+      return parsed;
     } catch {
       return {};
     }

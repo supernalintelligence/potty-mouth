@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCli, freshHome } from './helpers.mjs';
+import { spawn } from 'node:child_process';
+import { runCli, freshHome, BIN } from './helpers.mjs';
 
 test('install: creates settings.json with the hook wired in', () => {
   const home = freshHome();
@@ -221,4 +222,65 @@ test('session count pruning: adding a 101st distinct session drops the oldest, c
   assert.ok(sessionIds.length <= 100, `expected <=100 sessions, got ${sessionIds.length}`);
   assert.ok(sessionIds.includes('newest'), 'newest session must survive pruning');
   assert.ok(!sessionIds.includes('fake-session-0'), 'oldest session must be pruned out');
+});
+
+function spawnHook(home, prompt, sessionId) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', [BIN, 'hook'], { env: { ...process.env, HOME: home } });
+    child.on('error', reject);
+    child.on('close', () => resolve());
+    child.stdin.write(JSON.stringify({ prompt, session_id: sessionId }));
+    child.stdin.end();
+  });
+}
+
+test('regression 2026-08-10: concurrent blocks from different sessions are not lost to a state.json race', async () => {
+  const home = freshHome();
+  const N = 15;
+  await Promise.all(
+    Array.from({ length: N }, (_, i) => spawnHook(home, 'this is fucking broken', `concurrent-${i}`)),
+  );
+
+  const state = JSON.parse(fs.readFileSync(path.join(home, '.potty-mouth', 'state.json'), 'utf8'));
+  assert.equal(state.totalBlocks, N, `expected all ${N} concurrent blocks counted, got ${state.totalBlocks}`);
+  assert.equal(Object.keys(state.sessions).length, N, 'expected one session entry per concurrent invocation');
+});
+
+test('install: a pre-existing config file that is a JSON array (not an object) is treated as unusable, not crashed on or silently ignored', () => {
+  const home = freshHome();
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'settings.json'), '[]');
+
+  const r = runCli(['install'], { home });
+  assert.equal(r.code, 0, 'must not crash on a non-object pre-existing config');
+
+  const settings = JSON.parse(fs.readFileSync(path.join(home, '.claude', 'settings.json'), 'utf8'));
+  assert.ok(!Array.isArray(settings), 'must not leave the file as the original unusable array');
+  const commands = settings.hooks?.UserPromptSubmit?.flatMap((g) => g.hooks)?.map((h) => h.command) ?? [];
+  assert.ok(commands.some((c) => c.includes('potty-mouth hook')), 'must actually be installed, not silently no-op');
+});
+
+test('install: a pre-existing config file that is a JSON primitive (null/number/string) does not crash', () => {
+  for (const bad of ['null', '5', '"hello"']) {
+    const home = freshHome();
+    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.claude', 'settings.json'), bad);
+    const r = runCli(['install'], { home });
+    assert.equal(r.code, 0, `must not crash on pre-existing config = ${bad}`);
+  }
+});
+
+test('regression 2026-08-10: self-reference detection requires BOTH signature strings, not just the header alone', () => {
+  // An organic complaint that happens to mention the header phrase, without
+  // ever having actually been blocked before, must get a normal refusal —
+  // not a false "that's a resubmitted notice" claim.
+  const r = runCli(['hook'], {
+    input: JSON.stringify({
+      prompt: 'this fucking UserPromptSubmit operation blocked by hook thing is annoying',
+      session_id: 'header-only-no-echo',
+    }),
+  });
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.decision, 'block');
+  assert.doesNotMatch(out.reason, /previous rejection notice/i);
 });

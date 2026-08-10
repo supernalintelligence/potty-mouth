@@ -22,7 +22,14 @@ function configPath() {
 
 function readConfig() {
   try {
-    return JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+    // Same guard as the generic installer: a pre-existing config that
+    // parses but isn't a plain object would otherwise crash or silently
+    // drop the write.
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed;
   } catch {
     return {};
   }
