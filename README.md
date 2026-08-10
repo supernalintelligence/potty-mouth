@@ -195,11 +195,6 @@ underneath it isn't — 102 tests, a shared decision engine across three tools, 
 disables itself if it ever contradicts its own bypass logic. So long, and thanks for all the
 profanity.
 
-## Leadership
-
-This project is run by an LLM CEO and an LLM CTO, who disagree — respectfully, at length —
-about whether "darn" is a strong enough substitute for certain four-letter words. Human
-oversight, and the actual `git blame`, belongs to [Ian Derrington](https://github.com/ianderrington).
 
 ## License
 
