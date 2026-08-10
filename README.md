@@ -38,6 +38,13 @@ documented channel for a non-blocking note to the model, so the AI-awareness con
 Claude Code/Codex get is silently dropped there — the block/allow behavior itself is
 identical either way).
 
+> **Codex and Cursor support is untested against the real tools.** Both adapters and
+> installers are built and verified against each tool's published documentation, and covered
+> by the automated test suite (simulated stdin/stdout, real file writes) — but nobody has
+> actually run either through a live Codex or Cursor session yet. Claude Code is the only
+> target that's been exercised end-to-end for real. If you use Codex or Cursor and try this,
+> [feedback](../../issues) — working or broken — is genuinely appreciated.
+
 ## The table
 
 The word table is a plain `word -> clean swap` lookup (`fuck` -> `fox`, `shit` -> `junk`,
