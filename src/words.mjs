@@ -54,21 +54,12 @@ function tablePath() {
   return path.join(tableDir(), 'words.json');
 }
 
-// Merge order: SEED_WORDS < user table on disk. A user override always wins,
-// including deleting-by-remapping to a different swap or to REMOVED.
-export function loadWords() {
-  const file = tablePath();
-  let userWords = {};
-  try {
-    userWords = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    // no user table yet, or unreadable -> seed only
-  }
-  return { ...SEED_WORDS, ...userWords };
-}
-
 // Only ever writes the USER's additions/overrides, never the seed table, so
 // upgrading potty-mouth's built-in list never clobbers what someone added.
+// Each entry carries { swap, addedBy: 'user' | 'ai', addedAt } — the AI is
+// invited (see src/hook.mjs) to add words itself, but every addition is
+// tagged and visible via `potty-mouth list`, and removable/resettable by
+// the user at any time. The user is always in control of what's here.
 export function loadUserWords() {
   try {
     return JSON.parse(fs.readFileSync(tablePath(), 'utf8'));
@@ -82,11 +73,22 @@ export function saveUserWords(userWords) {
   fs.writeFileSync(tablePath(), JSON.stringify(userWords, null, 2) + '\n', 'utf8');
 }
 
-export function addWord(word, replacement) {
+// Merge order: SEED_WORDS < user table on disk. A user override always wins,
+// including deleting-by-remapping to a different swap or to REMOVED. Only
+// the swap string is exposed here — matchers don't need addedBy/addedAt.
+export function loadWords() {
+  const userWords = loadUserWords();
+  const flatUser = Object.fromEntries(
+    Object.entries(userWords).map(([word, meta]) => [word, meta.swap]),
+  );
+  return { ...SEED_WORDS, ...flatUser };
+}
+
+export function addWord(word, replacement, addedBy = 'user') {
   const key = word.toLowerCase().trim();
   if (!key) throw new Error('word cannot be empty');
   const userWords = loadUserWords();
-  userWords[key] = replacement ?? REMOVED;
+  userWords[key] = { swap: replacement ?? REMOVED, addedBy, addedAt: new Date().toISOString() };
   saveUserWords(userWords);
   return userWords;
 }

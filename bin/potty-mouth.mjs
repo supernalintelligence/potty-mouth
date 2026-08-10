@@ -4,6 +4,7 @@ import { install, uninstall } from '../src/install.mjs';
 import { loadWords, loadUserWords, addWord, removeWord, REMOVED } from '../src/words.mjs';
 import { detect, cleanText } from '../src/match.mjs';
 import { cleanPath } from '../src/clean.mjs';
+import { getStats, resetStats } from '../src/state.mjs';
 
 const [, , cmd, ...args] = process.argv;
 
@@ -16,8 +17,11 @@ Usage:
   potty-mouth hook                 (internal) run as the UserPromptSubmit hook
   potty-mouth check "<text>"       test a string against the table
   potty-mouth add <word> [swap]    add a word to your table (default: [removed])
+    --by ai                        tag the addition as AI-added (default: user)
   potty-mouth remove <word>        remove a word from your table
-  potty-mouth list                 show the full active table (seed + yours)
+  potty-mouth list                 show the full active table (seed + yours, tagged by who added it)
+  potty-mouth stats                show block counts (total + per session)
+  potty-mouth reset                zero out the block counter (word table is untouched)
   potty-mouth clean <path>         clean up a file or directory afterward
     --dry-run                      report only, write nothing
     --backup                       write <file>.bak before modifying
@@ -58,11 +62,15 @@ async function main() {
     }
 
     case 'add': {
-      const [word, ...rest] = args;
-      if (!word) { console.error('Usage: potty-mouth add <word> [swap]'); process.exit(2); }
-      const swap = rest.join(' ') || undefined;
-      addWord(word, swap);
-      console.log(`Added "${word}" -> "${swap ?? REMOVED}"`);
+      const byIdx = args.indexOf('--by');
+      const addedBy = byIdx !== -1 ? args[byIdx + 1] : 'user';
+      const rest = byIdx !== -1 ? [...args.slice(0, byIdx), ...args.slice(byIdx + 2)] : args;
+      const [word, ...swapParts] = rest;
+      if (!word) { console.error('Usage: potty-mouth add <word> [swap] [--by ai|user]'); process.exit(2); }
+      if (addedBy !== 'user' && addedBy !== 'ai') { console.error('--by must be "user" or "ai"'); process.exit(2); }
+      const swap = swapParts.join(' ') || undefined;
+      addWord(word, swap, addedBy);
+      console.log(`Added "${word}" -> "${swap ?? REMOVED}" (by ${addedBy})`);
       return;
     }
 
@@ -77,11 +85,31 @@ async function main() {
     case 'list': {
       const userWords = loadUserWords();
       const words = loadWords();
-      console.log(`${Object.keys(words).length} total (${Object.keys(userWords).length} yours):\n`);
+      console.log(`${Object.keys(words).length} total (${Object.keys(userWords).length} added by you/AI):\n`);
       for (const [word, swap] of Object.entries(words)) {
-        const mine = userWords[word] !== undefined ? ' *' : '';
-        console.log(`  ${word} -> ${swap}${mine}`);
+        const meta = userWords[word];
+        const tag = meta ? ` (${meta.addedBy})` : '';
+        console.log(`  ${word} -> ${swap}${tag}`);
       }
+      return;
+    }
+
+    case 'stats': {
+      const stats = getStats();
+      const sessionCount = Object.keys(stats.sessions).length;
+      console.log(`Total blocks: ${stats.totalBlocks} across ${sessionCount} session${sessionCount === 1 ? '' : 's'}.`);
+      const recent = Object.entries(stats.sessions)
+        .sort((a, b) => new Date(b[1].lastBlockedAt) - new Date(a[1].lastBlockedAt))
+        .slice(0, 5);
+      for (const [id, s] of recent) {
+        console.log(`  ${id.slice(0, 8)}...  ${s.blocks} block${s.blocks === 1 ? '' : 's'}  last: ${s.lastBlockedAt}`);
+      }
+      return;
+    }
+
+    case 'reset': {
+      const before = resetStats();
+      console.log(`Reset. Was at ${before.totalBlocks} total block(s) across ${Object.keys(before.sessions).length} session(s). Word table untouched.`);
       return;
     }
 
