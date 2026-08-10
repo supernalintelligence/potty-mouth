@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCli, runHook, freshHome, parseJson } from './helpers.mjs';
-import { emitBlock } from '../src/hook.mjs';
+import { commitBlock } from '../src/engine.mjs';
 
 test('status: reports enabled when never disabled', () => {
   const home = freshHome();
@@ -53,7 +53,7 @@ test('enable: clears the flag, but does not silently reinstall', () => {
 
   const r = runCli(['enable'], { home });
   assert.match(r.stdout, /Re-enabled/);
-  assert.match(r.stdout, /run `potty-mouth install`/);
+  assert.match(r.stdout, /potty-mouth install \[--target/);
 
   const status = runCli(['status'], { home }).stdout;
   assert.match(status, /^Enabled/);
@@ -71,31 +71,24 @@ test('enable: no-op when not disabled', () => {
   assert.match(r.stdout, /Was not disabled/);
 });
 
-test('critical: emitBlock refuses to block when the bypass token is present, no matter who calls it', () => {
+test('critical: commitBlock refuses to block when the bypass token is present, no matter who calls it', () => {
   // This exercises the defense-in-depth gateway DIRECTLY, independent of
-  // the normal runHook() control flow that would never call emitBlock with
-  // a bypass-containing prompt in the first place — simulating exactly the
-  // "some future bug calls this the wrong way" scenario the gateway exists
-  // to catch.
+  // the normal engine.decide() control flow that would never call
+  // commitBlock with a bypass-containing prompt in the first place —
+  // simulating exactly the "some future bug calls this the wrong way"
+  // scenario the gateway exists to catch. commitBlock returns a plain
+  // Decision object (adapter-agnostic), no stdout capture needed.
   const home = freshHome();
   const originalHome = process.env.HOME;
   process.env.HOME = home;
   try {
-    // Capture stdout since emitBlock writes directly to process.stdout.
-    let captured = '';
-    const originalWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = (chunk) => { captured += chunk; return true; };
-    try {
-      emitBlock('I_WANT_TO_SWEAR fuck this test', 'contradiction-session');
-    } finally {
-      process.stdout.write = originalWrite;
-    }
+    const decision = commitBlock('I_WANT_TO_SWEAR fuck this test', 'contradiction-session');
 
-    const out = captured ? JSON.parse(captured) : null;
-    assert.notEqual(out?.decision, 'block', 'must never emit a block decision in this contradiction');
-    assert.ok(out?.hookSpecificOutput?.additionalContext, 'must emit an explanatory context instead');
-    assert.match(out.hookSpecificOutput.additionalContext, /disabled itself/i);
-    assert.match(out.hookSpecificOutput.additionalContext, /bug report/i);
+    assert.notEqual(decision.action, 'block', 'must never emit a block decision in this contradiction');
+    assert.equal(decision.action, 'allow');
+    assert.ok(decision.context, 'must emit an explanatory context instead');
+    assert.match(decision.context, /disabled itself/i);
+    assert.match(decision.context, /bug report/i);
 
     const disabledPath = path.join(home, '.potty-mouth', 'DISABLED.json');
     assert.ok(fs.existsSync(disabledPath), 'must persist the disabled flag');
@@ -114,13 +107,7 @@ test('critical: after an automatic trigger, the hook is inert on its very next r
   const originalHome = process.env.HOME;
   process.env.HOME = home;
   try {
-    const originalWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = () => true;
-    try {
-      emitBlock('I_WANT_TO_SWEAR trigger it', 'auto-session');
-    } finally {
-      process.stdout.write = originalWrite;
-    }
+    commitBlock('I_WANT_TO_SWEAR trigger it', 'auto-session');
   } finally {
     process.env.HOME = originalHome;
   }
@@ -131,4 +118,24 @@ test('critical: after an automatic trigger, the hook is inert on its very next r
   assert.equal(r.stdout, '');
   const status = runCli(['status'], { home }).stdout;
   assert.match(status, /DISABLED \(automatic/);
+});
+
+test('critical: an automatic kill-switch trigger uninstalls from EVERY target, not just the one active', () => {
+  const home = freshHome();
+  const originalHome = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    runCli(['install'], { home });
+    runCli(['install', '--target', 'codex'], { home });
+    runCli(['install', '--target', 'cursor'], { home });
+
+    commitBlock('I_WANT_TO_SWEAR trigger it', 'multi-target-session');
+
+    const status = runCli(['status'], { home }).stdout;
+    assert.match(status, /claude-code: not installed/);
+    assert.match(status, /codex: not installed/);
+    assert.match(status, /cursor: not installed/);
+  } finally {
+    process.env.HOME = originalHome;
+  }
 });

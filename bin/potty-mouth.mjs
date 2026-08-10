@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { runHook } from '../src/hook.mjs';
-import { install, uninstall } from '../src/install.mjs';
+import { getInstaller, INSTALLERS } from '../src/installers/index.mjs';
 import { loadWords, loadUserWords, addWord, removeWord, REMOVED, SEED_FUZZY_ROOTS } from '../src/words.mjs';
 import { detect, cleanText } from '../src/match.mjs';
 import { cleanPath } from '../src/clean.mjs';
@@ -8,52 +8,73 @@ import { getStats, resetStats } from '../src/state.mjs';
 import { isDisabled, getDisabledInfo, disable, enable } from '../src/killswitch.mjs';
 
 const [, , cmd, ...args] = process.argv;
+const TARGETS = Object.keys(INSTALLERS);
+
+function extractTarget(argv) {
+  const idx = argv.indexOf('--target');
+  const target = idx !== -1 ? argv[idx + 1] : undefined;
+  const rest = idx !== -1 ? [...argv.slice(0, idx), ...argv.slice(idx + 2)] : argv;
+  if (target && !TARGETS.includes(target)) {
+    console.error(`Unknown --target "${target}" — expected one of: ${TARGETS.join(', ')}`);
+    process.exit(2);
+  }
+  return { target, rest };
+}
 
 function printHelp() {
   console.log(`potty-mouth — won't respond until you ask nicely
 
+Targets: ${TARGETS.join(', ')} (default: claude-code). Pass --target <name> to
+install/uninstall/hook returns the right target's config/adapter.
+
 Usage:
-  potty-mouth install              wire the hook into ~/.claude/settings.json
-  potty-mouth uninstall            remove it
-  potty-mouth hook                 (internal) run as the UserPromptSubmit hook
-  potty-mouth check "<text>"       test a string against the table
-  potty-mouth add <word> [swap]    add a word to your table (default: [removed])
-    --by ai                        tag the addition as AI-added (default: user)
-    --force                        override the short-word/common-word safety guard
-  potty-mouth remove <word>        remove a word from your table
-  potty-mouth list                 show the full active table (seed + yours, tagged by who added it)
-  potty-mouth stats                show block/bypass counts (total + per session)
-  potty-mouth reset                zero out the counters (word table is untouched)
-  potty-mouth clean <path>         clean up a file or directory afterward
-    --dry-run                      report only, write nothing
-    --backup                       write <file>.bak before modifying
-    --ext <suffix>                 only touch files ending in <suffix> (dir mode)
-  potty-mouth disable [reason]     kill switch — go fully inert + uninstall (word table untouched)
-  potty-mouth enable               turn back on (re-run \`install\` if it was also uninstalled)
-  potty-mouth status               show enabled/disabled state and why
+  potty-mouth install [--target <t>]     wire the hook into that target's config
+  potty-mouth uninstall [--target <t>]   remove it
+  potty-mouth hook [--target <t>]        (internal) run as the target's prompt-submit hook
+  potty-mouth check "<text>"             test a string against the table
+  potty-mouth add <word> [swap]          add a word to your table (default: [removed])
+    --by ai                              tag the addition as AI-added (default: user)
+    --force                              override the short-word/common-word safety guard
+  potty-mouth remove <word>              remove a word from your table
+  potty-mouth list                       show the full active table (seed + yours, tagged by who added it)
+  potty-mouth stats                      show block/bypass counts (total + per session)
+  potty-mouth reset                      zero out the counters (word table is untouched)
+  potty-mouth clean <path>               clean up a file or directory afterward
+    --dry-run                            report only, write nothing
+    --backup                             write <file>.bak before modifying
+    --ext <suffix>                       only touch files ending in <suffix> (dir mode)
+  potty-mouth disable [reason]           kill switch — go fully inert + uninstall EVERYWHERE (word table untouched)
+  potty-mouth enable                     turn back on (re-run \`install\` per target if also uninstalled)
+  potty-mouth status                     show enabled/disabled state and per-target install status
 
   Type I_WANT_TO_SWEAR anywhere in a prompt to deliberately bypass the
   filter for that one prompt. Tracked separately from blocks — see
   \`potty-mouth stats\`. If a block is ever emitted despite this token being
   present, potty-mouth treats that as an unexplainable internal bug and
-  automatically disables itself — see \`potty-mouth status\`.
+  automatically disables itself everywhere — see \`potty-mouth status\`.
 `);
 }
 
 async function main() {
   switch (cmd) {
-    case 'hook':
-      return runHook();
+    case 'hook': {
+      const { target } = extractTarget(args);
+      return runHook(target);
+    }
 
     case 'install': {
-      const r = install();
+      const { target } = extractTarget(args);
+      const installer = getInstaller(target);
+      const r = installer.install();
       console.log(r.changed ? `Installed. Wired into ${r.path}` : `Already installed in ${r.path}`);
       if (isDisabled()) console.log('Note: potty-mouth is currently DISABLED (see `potty-mouth status`) — run `potty-mouth enable` too, or it will stay inert despite being installed.');
       return;
     }
 
     case 'uninstall': {
-      const r = uninstall();
+      const { target } = extractTarget(args);
+      const installer = getInstaller(target);
+      const r = installer.uninstall();
       console.log(r.changed ? `Removed from ${r.path}` : `Nothing to remove in ${r.path}`);
       return;
     }
@@ -150,8 +171,8 @@ async function main() {
     case 'disable': {
       const reason = args.join(' ') || 'Manual — user ran `potty-mouth disable`.';
       disable(reason, { automatic: false });
-      console.log('Disabled. The hook is now fully inert and has been uninstalled from settings.json.');
-      console.log('The word table and counters are untouched. Run `potty-mouth enable` (then `install`) to turn it back on.');
+      console.log('Disabled. The hook is now fully inert and has been uninstalled from EVERY target it was wired into.');
+      console.log('The word table and counters are untouched. Run `potty-mouth enable` (then `install` per target) to turn it back on.');
       return;
     }
 
@@ -160,7 +181,7 @@ async function main() {
       const cleared = enable();
       if (!was) { console.log('Was not disabled — nothing to do.'); return; }
       console.log(`Re-enabled${cleared ? '' : ' (flag was already clear)'}.`);
-      console.log('If it was auto-uninstalled, run `potty-mouth install` to wire it back into settings.json.');
+      console.log('If it was auto-uninstalled, run `potty-mouth install [--target <t>]` per target to wire it back in.');
       return;
     }
 
@@ -178,6 +199,16 @@ async function main() {
         if (info?.automatic) {
           console.log('  This should never happen — please file a bug report if you see this.');
         }
+      }
+      console.log('\nPer-target install status:');
+      for (const [name, installer] of Object.entries(INSTALLERS)) {
+        let state;
+        try {
+          state = installer.isInstalled() ? 'installed' : 'not installed';
+        } catch (e) {
+          state = `error checking (${e.message})`;
+        }
+        console.log(`  ${name}: ${state} (${installer.configPath()})`);
       }
       return;
     }

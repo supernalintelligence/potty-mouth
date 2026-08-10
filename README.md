@@ -1,6 +1,7 @@
 # potty-mouth
 
-A [Claude Code](https://claude.com/claude-code) hook that won't respond until you ask nicely.
+A prompt-submit hook — for [Claude Code](https://claude.com/claude-code), [Codex CLI](https://openai.com/codex/),
+or [Cursor](https://cursor.com) — that won't respond until you ask nicely.
 
 Say something with a swear word in it and the prompt never reaches the model — you get a
 short refusal and have to try again. No alerts, no logging beyond a local word table, just
@@ -16,12 +17,26 @@ cleaned version: fix this foxing bug
 
 ```
 npm install -g potty-mouth
-potty-mouth install
+potty-mouth install                      # Claude Code (default)
+potty-mouth install --target codex       # Codex CLI
+potty-mouth install --target cursor      # Cursor
 ```
 
-That wires a `UserPromptSubmit` hook into `~/.claude/settings.json`. Every prompt you submit
-gets checked against the word table before Claude ever sees it. `potty-mouth uninstall`
-removes it.
+Each target writes to that tool's own config — `~/.claude/settings.json` (Claude Code),
+`~/.codex/hooks.json` (Codex), `~/.cursor/hooks.json` (Cursor) — you can install into any
+number of them at once. Every prompt you submit in that tool gets checked against the word
+table before the model ever sees it. `potty-mouth uninstall [--target <t>]` removes one;
+`potty-mouth status` shows install state across all three.
+
+One decision engine drives every target — detection, the word table, the bypass phrase, and
+the kill switch below all behave identically regardless of which tool is asking. Only the
+stdin/stdout shape differs per target, handled by a thin adapter (`src/adapters/`); Codex's
+contract is a verified byte-for-byte match for Claude Code's, so it reuses that adapter
+directly rather than duplicating it. Cursor's is genuinely different (`{"continue":
+true|false, "user_message": "..."}` instead of `{"decision": "block", ...}`, and it has no
+documented channel for a non-blocking note to the model, so the AI-awareness context that
+Claude Code/Codex get is silently dropped there — the block/allow behavior itself is
+identical either way).
 
 ## The table
 
@@ -36,13 +51,54 @@ potty-mouth list                  # see the full active table (seed + yours)
 ```
 
 Your additions live in `~/.potty-mouth/words.json`, separate from the built-in seed table, so
-upgrading potty-mouth never clobbers what you added.
+upgrading potty-mouth never clobbers what you added — and each is tagged with who added it,
+`(user)` or `(ai)`. The model itself is allowed to grow the table when it notices something
+that slipped through (`potty-mouth add <word> [swap] --by ai`) — you can always see everything
+it's added via `potty-mouth list` and remove any of it, same as your own entries.
 
 Matching is whole-word and case-preserving, with a strict `\b...\b` boundary (so "class" is
-never touched for containing "ass" — no Scunthorpe problem), and it's obfuscation-tolerant
-for the *block* decision — `f*ck`, `sh!t`, `f.u.c.k` all still trip the filter. It does **not**
-blind-rewrite an obfuscated match in place, only a strict exact match — guessing at a fuzzy
-match's intended spelling risks mangling the sentence.
+never touched for containing "ass" — no Scunthorpe problem). A small, separately-curated list
+of words also gets obfuscation-tolerant matching on top — `f*ck`, `sh!t`, `f.u.c.k` all still
+trip the filter — bounded to a known set of trailing suffixes so it can't false-positive as a
+bare prefix of an unrelated word (an earlier version of this list included short roots like
+`ass`/`cock`/`dick` and genuinely broke on `associated`, `cockpit`, `dickens` — fixed and
+covered by a regression test). It does **not** blind-rewrite an obfuscated match in place —
+guessing at a fuzzy match's intended spelling risks mangling the sentence, so only a strict
+exact match ever gets swapped.
+
+Two extra guards keep this from ever interfering with something that isn't a real
+conversational message: content wrapped in a recognized system envelope (`<task-notification>`,
+`<system-reminder>` — the way some tools deliver background-task reports through the same
+channel as a typed prompt) is never scanned, and neither is anything over 4000 characters —
+a human swearing at an assistant is always short; a long prompt is almost certainly a paste.
+
+## Saying it on purpose
+
+Type `I_WANT_TO_SWEAR` anywhere in a prompt and that one prompt gets through untouched, no
+matter what it contains — a deliberate, explicit override, always available, tracked
+separately from blocks (`potty-mouth stats`). The model gets told this happened so it doesn't
+mistake it for a filter failure.
+
+## Counters
+
+```
+potty-mouth stats     # blocks + bypasses, total and per conversation
+potty-mouth reset      # zero the counters — the word table is a separate, untouched concern
+```
+
+## Kill switch
+
+If a block is ever emitted *despite* the bypass phrase being present — which should be
+structurally impossible, the bypass check runs independently of whatever decided to block —
+potty-mouth treats that as a bug it can't explain rather than trusting logic that's already
+proven wrong once. It disables itself everywhere it's installed (word table and counters
+untouched) and tells the model to flag it to you and suggest filing a bug report.
+
+```
+potty-mouth disable [reason]   # do it yourself, any time — uninstalls from every target
+potty-mouth enable              # turn it back on (re-run install per target afterward)
+potty-mouth status               # enabled/disabled, why, and per-target install state
+```
 
 ## Cleaning up afterward
 
@@ -62,13 +118,26 @@ plain text.
 
 ## How it works
 
-Claude Code's `UserPromptSubmit` hook receives the prompt on stdin before the model sees
-anything. `potty-mouth hook` (what `potty-mouth install` wires in) reads it, checks it against
-the table, and if something matches, returns `{"decision": "block", "reason": "..."}` — the
-prompt is discarded and you see the refusal instead. A clean prompt passes through untouched.
+Each target's prompt-submit hook receives the text on stdin before the model sees anything.
+`potty-mouth hook --target <t>` (what `potty-mouth install` wires in) parses that target's own
+input shape, hands it to one shared decision engine (`src/engine.mjs` — detection, bypass,
+counters, kill switch, all of it), and serializes the result back into that target's own
+output contract. Adding a fourth target is a new ~20-line adapter file, not a fork of the
+whole hook.
 
 No network calls, no external service, no LLM in the loop for the block decision — just a
 regex table lookup against a local file.
+
+## Tests
+
+```
+npm test
+```
+
+95 tests (`node --test`, no dependencies) covering the matcher (including regression tests for
+every false positive found during development), the full hook pipeline per target, the
+installers, the bypass phrase, and the kill switch — including directly forcing the "block
+despite bypass" contradiction and confirming it self-disables rather than emitting a block.
 
 ## License
 
