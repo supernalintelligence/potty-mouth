@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>potty-mouth — a profanity filter for AI coding assistants</title>
-<meta name="description" content="potty-mouth blocks a rude prompt before Claude Code, Codex CLI, or Cursor ever sees it. Local-only, zero dependencies, 95 tests. Don't Panic — just don't swear either.">
+<meta name="description" content="potty-mouth blocks a rude prompt before Claude Code, Codex CLI, or Cursor ever sees it. Local-only, zero dependencies, 98 tests. Don't Panic — just don't swear either.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧼</text></svg>">
 <style>
   :root {
@@ -45,6 +45,14 @@
   }
   main { max-width: var(--maxw); margin: 0 auto; padding: 3rem 1.25rem 5rem; }
   header.hero { text-align: center; padding: 2.5rem 1rem 1rem; }
+  .hero-img {
+    width: 100%;
+    max-width: 480px;
+    height: auto;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: #fff;
+  }
   .badges { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 1rem 0 1.5rem; }
   .badges img { height: 20px; }
   h1 {
@@ -183,10 +191,11 @@
 <main>
 
   <header class="hero">
+    <img src="assets/hero.png" alt="Three people gasping in shock, New Yorker cartoon style" class="hero-img">
     <div class="badges">
       <img src="https://img.shields.io/npm/v/potty-mouth.svg" alt="npm version">
       <img src="https://img.shields.io/npm/l/potty-mouth.svg" alt="license">
-      <img src="https://img.shields.io/badge/tests-95%20passing-brightgreen.svg" alt="95 tests passing">
+      <img src="https://img.shields.io/badge/tests-98%20passing-brightgreen.svg" alt="98 tests passing">
     </div>
     <h1>potty-mouth 🧼</h1>
     <p class="tagline">A profanity filter for AI coding assistants. Say something rude to Claude Code, Codex CLI, or Cursor, and the prompt never reaches the model. Mostly harmless.</p>
@@ -271,7 +280,7 @@ potty-mouth install</code><button class="copy-btn" onclick="copyInstall(this)">c
     </details>
     <details>
       <summary>Is this a real filter or a joke package?</summary>
-      <p>Both. The bit is real — it will absolutely refuse to help until you rephrase — but the engineering underneath isn't a joke: 95 tests, one shared decision engine across three tools, a kill switch that disables itself if it ever contradicts its own bypass logic.</p>
+      <p>Both. The bit is real — it will absolutely refuse to help until you rephrase — but the engineering underneath isn't a joke: 98 tests, one shared decision engine across three tools, a kill switch that disables itself if it ever contradicts its own bypass logic.</p>
     </details>
   </section>
 
