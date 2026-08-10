@@ -33,6 +33,36 @@ test('regression: the exact false-positive prompt from the 2026-08-09 incident p
   assert.equal(r.stdout, '');
 });
 
+test('regression 2026-08-10: a resubmitted rejection notice (real profanity still embedded) gets a clear self-reference message, not a random one', () => {
+  // Real incident: a rejected prompt's on-screen block notice — glyph and
+  // all — got resubmitted verbatim as the next prompt (most likely a
+  // copy-paste that grabbed the notice along with the retry). The original
+  // profanity was still embedded, so it correctly blocked again — but with
+  // a generic random refusal that gave no clue what actually happened,
+  // nesting deeper on each further attempt.
+  const nested = "⏺ UserPromptSubmit operation blocked by hook:\n  That word's not invited. The rest of your sentence is welcome back anytime.\n\n  Original prompt: this is a fucking test";
+  const r = runHook({ prompt: nested, session_id: 'self-ref-repro' });
+  const out = parseJson(r.stdout);
+  assert.equal(out.decision, 'block');
+  assert.match(out.reason, /previous rejection notice/i);
+  assert.match(out.reason, /pasted back in/i);
+});
+
+test('regression 2026-08-10: self-reference detection also fires on the larger real incident content', () => {
+  const nested = 'UserPromptSubmit operation blocked by hook:\nDon\'t Panic. Just don\'t swear either.\n\nOriginal prompt: some long technical report...\n\n✻ Churned for 24m 0s\n\n⏺ UserPromptSubmit operation blocked by hook:\n  Share and Enjoy.\n\n  Original prompt: this is fucking broken';
+  const r = runHook({ prompt: nested, session_id: 'self-ref-repro-2' });
+  const out = parseJson(r.stdout);
+  assert.equal(out.decision, 'block');
+  assert.match(out.reason, /previous rejection notice/i);
+});
+
+test('a prompt that merely mentions being blocked, without the exact signature phrase, still gets a normal refusal', () => {
+  const r = runHook({ prompt: 'ugh this fucking thing keeps getting blocked by some hook', session_id: 'not-self-ref' });
+  const out = parseJson(r.stdout);
+  assert.equal(out.decision, 'block');
+  assert.doesNotMatch(out.reason, /previous rejection notice/i);
+});
+
 test('critical: <task-notification> envelope is never scanned, regardless of content', () => {
   const home = freshHome();
   const body = '<task-notification>\n<task-id>abc123</task-id>\n' +

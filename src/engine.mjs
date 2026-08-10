@@ -78,7 +78,23 @@ const REFUSAL_TIERS = [
   },
 ];
 
-function pickRefusal(sessionBlocks) {
+// The exact header potty-mouth's own block notices render as in a terminal.
+// Confirmed real incident (2026-08-10): a rejected prompt's on-screen
+// notice — this header, the refusal reason, AND the "Original prompt: ..."
+// echo — got resubmitted verbatim as the NEXT prompt (most likely a
+// copy-paste that grabbed the notice along with the intended retry). Since
+// the original profanity is still embedded in that resubmitted text, it
+// blocks again, nesting deeper each time and burying the actual reason
+// under a wall of quoted rejection text. Detection was correct both times —
+// the confusing part was giving no clue what actually happened. A generic
+// random refusal doesn't help here; naming the loop explicitly does.
+const SELF_REFERENCE_SIGNATURE = 'UserPromptSubmit operation blocked by hook';
+
+function pickRefusal(sessionBlocks, promptText) {
+  if (promptText.includes(SELF_REFERENCE_SIGNATURE)) {
+    return "That's a previous rejection notice, pasted back in — not a new message. " +
+      'Retype what you actually meant to say, without copying the notice text along with it.';
+  }
   if (sessionBlocks === 42) {
     return "Forty-two. Of course it's forty-two. Even that isn't an excuse — try again, nicely.";
   }
@@ -123,7 +139,7 @@ export function commitBlock(promptText, sessionId) {
     };
   }
   const { sessionBlocks } = recordBlock(sessionId);
-  return { action: 'block', reason: pickRefusal(sessionBlocks) };
+  return { action: 'block', reason: pickRefusal(sessionBlocks, promptText) };
 }
 
 // Decision shapes:
