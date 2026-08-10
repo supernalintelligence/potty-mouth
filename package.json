@@ -1,0 +1,31 @@
+{
+  "name": "potty-mouth",
+  "version": "0.1.0",
+  "description": "A Claude Code hook that won't respond until you ask nicely. Blocks profane prompts, keeps a growable word table, and can clean up the mess afterward.",
+  "type": "module",
+  "bin": {
+    "potty-mouth": "bin/potty-mouth.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude-code",
+    "hook",
+    "profanity-filter",
+    "claude",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/REPLACE_ME/potty-mouth.git"
+  }
+}
