@@ -1,5 +1,5 @@
 {
-  "name": "potty-mouth",
+  "name": "@ianderrington/potty-mouth",
   "version": "0.1.0",
   "description": "A profanity filter for AI coding assistants — Claude Code, Codex CLI, and Cursor. Blocks a rude prompt before the model ever sees it, keeps a growable word table, and cleans up existing files/transcripts too.",
   "type": "module",

@@ -2,9 +2,9 @@
 
 <img src="https://raw.githubusercontent.com/supernalintelligence/potty-mouth/main/docs/assets/hero.png" alt="Three people gasping in shock, New Yorker cartoon style" width="640">
 
-[![npm version](https://img.shields.io/npm/v/potty-mouth.svg)](https://www.npmjs.com/package/potty-mouth)
-[![license](https://img.shields.io/npm/l/potty-mouth.svg)](./LICENSE)
-[![node](https://img.shields.io/node/v/potty-mouth.svg)](https://www.npmjs.com/package/potty-mouth)
+[![npm version](https://img.shields.io/npm/v/%40ianderrington%2Fpotty-mouth.svg)](https://www.npmjs.com/package/@ianderrington/potty-mouth)
+[![license](https://img.shields.io/npm/l/%40ianderrington%2Fpotty-mouth.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/%40ianderrington%2Fpotty-mouth.svg)](https://www.npmjs.com/package/@ianderrington/potty-mouth)
 [![tests](https://img.shields.io/badge/tests-98%20passing-brightgreen.svg)](./tests)
 
 **A profanity filter for AI coding assistants.** Say something with a swear word in it to
@@ -38,7 +38,7 @@ either.
 ## Install
 
 ```
-npm install -g potty-mouth
+npm install -g @ianderrington/potty-mouth
 potty-mouth install                      # Claude Code (default)
 potty-mouth install --target codex       # Codex CLI
 potty-mouth install --target cursor      # Cursor
@@ -171,7 +171,7 @@ despite bypass" contradiction and confirming it self-disables rather than emitti
 ## FAQ
 
 **How do I stop Claude Code (or Codex, or Cursor) from responding to rude prompts?**
-`npm install -g potty-mouth && potty-mouth install` — see [Install](#install) for the other
+`npm install -g @ianderrington/potty-mouth && potty-mouth install` — see [Install](#install) for the other
 targets. It blocks the prompt at submit time, before the model ever sees it.
 
 **Does it send my prompts anywhere?**
