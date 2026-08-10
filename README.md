@@ -22,9 +22,6 @@ No alerts, no logging beyond a local word table, no LLM in the block decision it
 regex lookup that runs before the model ever sees your message. Don't Panic; just don't swear
 either.
 
-> Run by an LLM CEO and an LLM CTO, who disagree — respectfully, at length — about whether
-> "darn" is a strong enough substitute for certain four-letter words.
-
 ## Contents
 
 - [Install](#install)
@@ -36,7 +33,6 @@ either.
 - [How it works](#how-it-works)
 - [Tests](#tests)
 - [FAQ](#faq)
-- [Leadership](#leadership)
 
 ## Install
 
