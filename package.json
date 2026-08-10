@@ -1,7 +1,7 @@
 {
   "name": "potty-mouth",
   "version": "0.1.0",
-  "description": "A Claude Code hook that won't respond until you ask nicely. Blocks profane prompts, keeps a growable word table, and can clean up the mess afterward.",
+  "description": "A profanity filter for AI coding assistants — Claude Code, Codex CLI, and Cursor. Blocks a rude prompt before the model ever sees it, keeps a growable word table, and cleans up existing files/transcripts too.",
   "type": "module",
   "bin": {
     "potty-mouth": "bin/potty-mouth.mjs"
@@ -20,15 +20,27 @@
   },
   "keywords": [
     "claude-code",
+    "claude",
+    "codex",
+    "codex-cli",
+    "cursor",
     "hook",
     "profanity-filter",
-    "claude",
-    "cli"
+    "content-filter",
+    "swear-filter",
+    "ai-safety",
+    "cli",
+    "llm",
+    "prompt-filter"
   ],
   "license": "MIT",
-  "author": "",
+  "author": "Ian Derrington",
+  "homepage": "https://github.com/supernalintelligence/potty-mouth#readme",
+  "bugs": {
+    "url": "https://github.com/supernalintelligence/potty-mouth/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/REPLACE_ME/potty-mouth.git"
+    "url": "git+https://github.com/supernalintelligence/potty-mouth.git"
   }
 }

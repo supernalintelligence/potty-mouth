@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>potty-mouth — a profanity filter for AI coding assistants</title>
+<meta name="description" content="potty-mouth blocks a rude prompt before Claude Code, Codex CLI, or Cursor ever sees it. Local-only, zero dependencies, 95 tests. Don't Panic — just don't swear either.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧼</text></svg>">
+<style>
+  :root {
+    --bg: #faf7f2;
+    --bg-panel: #ffffff;
+    --ink: #241f1a;
+    --ink-soft: #5c5347;
+    --ink-faint: #8a8072;
+    --accent: #d1602a;
+    --accent-soft: #f3d9c6;
+    --line: #e7ddce;
+    --code-bg: #2a231c;
+    --code-ink: #f3ead9;
+    --radius: 14px;
+    --maxw: 780px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17140f;
+      --bg-panel: #221d16;
+      --ink: #f3ead9;
+      --ink-soft: #c9bda8;
+      --ink-faint: #8f8371;
+      --accent: #e98c52;
+      --accent-soft: #3a2a1c;
+      --line: #362d21;
+      --code-bg: #100d09;
+      --code-ink: #f3ead9;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: var(--maxw); margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+  header.hero { text-align: center; padding: 2.5rem 1rem 1rem; }
+  .badges { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 1rem 0 1.5rem; }
+  .badges img { height: 20px; }
+  h1 {
+    font-size: clamp(2.2rem, 6vw, 3rem);
+    margin: 0.3rem 0 0.4rem;
+    letter-spacing: -0.02em;
+  }
+  .tagline { color: var(--ink-soft); font-size: 1.15rem; max-width: 46ch; margin: 0 auto 1.75rem; }
+  .cta-row { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .btn {
+    display: inline-block;
+    padding: 0.65rem 1.3rem;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: transform 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.ghost { border: 1px solid var(--line); color: var(--ink); }
+
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 1.1rem 1.3rem;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    position: relative;
+  }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; }
+  :not(pre) > code {
+    background: var(--accent-soft);
+    padding: 0.15em 0.4em;
+    border-radius: 6px;
+    font-size: 0.88em;
+  }
+  .copy-btn {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: var(--code-ink);
+    font-size: 0.75rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.16); }
+
+  .demo {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.2rem 1.4rem;
+    margin: 2rem 0;
+  }
+  .demo .line { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.88rem; margin: 0.25rem 0; }
+  .demo .prompt { color: var(--ink-faint); }
+  .demo .blocked { color: var(--accent); font-weight: 600; }
+  .demo .swap { color: var(--ink-soft); }
+
+  section { margin: 3rem 0; }
+  h2 {
+    font-size: 1.5rem;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1rem;
+  }
+  .card {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+  }
+  .card h3 { margin: 0 0 0.4rem; font-size: 1.02rem; }
+  .card p { margin: 0; color: var(--ink-soft); font-size: 0.92rem; }
+
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    font-size: 0.9rem;
+    margin: 1rem 0;
+  }
+  .flow .step {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.5rem 0.85rem;
+  }
+  .flow .arrow { color: var(--ink-faint); }
+
+  details {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.85rem 1.1rem;
+    margin-bottom: 0.6rem;
+  }
+  details summary { cursor: pointer; font-weight: 600; }
+  details p { margin: 0.6rem 0 0.1rem; color: var(--ink-soft); }
+
+  footer {
+    text-align: center;
+    color: var(--ink-faint);
+    font-size: 0.85rem;
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--line);
+  }
+  footer a { color: var(--ink-soft); }
+  .dontpanic {
+    background: none;
+    border: 1px dashed var(--line);
+    color: var(--ink-faint);
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-top: 1rem;
+  }
+  #panic-msg { display: none; margin-top: 0.6rem; font-size: 0.85rem; color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+
+  <header class="hero">
+    <div class="badges">
+      <img src="https://img.shields.io/npm/v/potty-mouth.svg" alt="npm version">
+      <img src="https://img.shields.io/npm/l/potty-mouth.svg" alt="license">
+      <img src="https://img.shields.io/badge/tests-95%20passing-brightgreen.svg" alt="95 tests passing">
+    </div>
+    <h1>potty-mouth 🧼</h1>
+    <p class="tagline">A profanity filter for AI coding assistants. Say something rude to Claude Code, Codex CLI, or Cursor, and the prompt never reaches the model. Mostly harmless.</p>
+    <div class="cta-row">
+      <a class="btn primary" href="https://github.com/supernalintelligence/potty-mouth">View on GitHub</a>
+      <a class="btn ghost" href="https://www.npmjs.com/package/potty-mouth">View on npm</a>
+    </div>
+  </header>
+
+  <pre><code>npm install -g potty-mouth
+potty-mouth install</code><button class="copy-btn" onclick="copyInstall(this)">copy</button></pre>
+
+  <div class="demo">
+    <div class="line prompt">$ potty-mouth check "fix this fucking bug"</div>
+    <div class="line blocked">BLOCKED — would refuse this prompt.</div>
+    <div class="line swap">cleaned version: fix this foxing bug</div>
+  </div>
+
+  <section id="what">
+    <h2>What it actually does</h2>
+    <p>Every prompt-submit hook in these tools receives your text on stdin before the model sees anything. potty-mouth checks it against a local word table — if something matches, the prompt is refused with a short message and never reaches the model at all. No network calls, no third-party service, no LLM in the block decision itself. Just a regex lookup against a JSON file on your own machine.</p>
+    <div class="flow">
+      <span class="step">you type</span>
+      <span class="arrow">→</span>
+      <span class="step">potty-mouth hook</span>
+      <span class="arrow">→</span>
+      <span class="step">word table lookup</span>
+      <span class="arrow">→</span>
+      <span class="step">block <em>or</em> pass through</span>
+      <span class="arrow">→</span>
+      <span class="step">model (if clean)</span>
+    </div>
+  </section>
+
+  <section id="features">
+    <h2>Features</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Three targets, one engine</h3>
+        <p>Claude Code, Codex CLI, and Cursor are all supported through one shared decision engine — detection, bypass, and the kill switch behave identically regardless of which tool is asking.</p>
+      </div>
+      <div class="card">
+        <h3>A growable table</h3>
+        <p>Add your own words (or let the AI add ones it notices slipped through) — every addition is tagged by who added it, and you can always see and remove anything.</p>
+      </div>
+      <div class="card">
+        <h3>Say it on purpose</h3>
+        <p>Type <code>I_WANT_TO_SWEAR</code> anywhere in a prompt to deliberately override the filter for that one message — tracked separately from blocks.</p>
+      </div>
+      <div class="card">
+        <h3>A real kill switch</h3>
+        <p>If a block ever fires despite the bypass phrase being present — which should be structurally impossible — potty-mouth disables itself everywhere and asks you to file a bug report.</p>
+      </div>
+      <div class="card">
+        <h3>Never touches non-conversation content</h3>
+        <p>Background-task reports and anything over 4000 characters are skipped entirely — a human swearing at an assistant is always short.</p>
+      </div>
+      <div class="card">
+        <h3>Clean up afterward, too</h3>
+        <p>The same word table can scan and rewrite existing files or transcripts, with <code>--dry-run</code> and <code>--backup</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <h2>FAQ</h2>
+    <details>
+      <summary>How do I stop Claude Code (or Codex, or Cursor) from responding to rude prompts?</summary>
+      <p><code>npm install -g potty-mouth &amp;&amp; potty-mouth install</code> — pass <code>--target codex</code> or <code>--target cursor</code> for the other tools. It blocks the prompt at submit time, before the model ever sees it.</p>
+    </details>
+    <details>
+      <summary>Does it send my prompts anywhere?</summary>
+      <p>No. Everything runs locally — a regex table lookup against a JSON file in <code>~/.potty-mouth/</code>. No network calls, no third-party service, no telemetry.</p>
+    </details>
+    <details>
+      <summary>What if I actually need to swear at it?</summary>
+      <p>Type <code>I_WANT_TO_SWEAR</code> anywhere in that one prompt. It goes through untouched, and the model is told it happened on purpose.</p>
+    </details>
+    <details>
+      <summary>Will it block a big pasted log file just because one word matches?</summary>
+      <p>No — anything over 4000 characters is never scanned, and recognized system envelopes (background-task notifications, etc.) are skipped entirely.</p>
+    </details>
+    <details>
+      <summary>Is this a real filter or a joke package?</summary>
+      <p>Both. The bit is real — it will absolutely refuse to help until you rephrase — but the engineering underneath isn't a joke: 95 tests, one shared decision engine across three tools, a kill switch that disables itself if it ever contradicts its own bypass logic.</p>
+    </details>
+  </section>
+
+  <footer>
+    <p>MIT licensed. Built by <a href="https://github.com/ianderrington">Ian Derrington</a>.<br>So long, and thanks for all the profanity.</p>
+    <button class="dontpanic" onclick="document.getElementById('panic-msg').style.display='block'">don't panic</button>
+    <div id="panic-msg">Just don't swear either. Try that again.</div>
+  </footer>
+
+</main>
+<script>
+  function copyInstall(btn) {
+    navigator.clipboard.writeText('npm install -g potty-mouth\npotty-mouth install').then(() => {
+      const original = btn.textContent;
+      btn.textContent = 'copied';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    });
+  }
+</script>
+</body>
+</html>

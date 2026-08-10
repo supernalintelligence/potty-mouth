@@ -1,17 +1,37 @@
 # potty-mouth
 
-A prompt-submit hook — for [Claude Code](https://claude.com/claude-code), [Codex CLI](https://openai.com/codex/),
-or [Cursor](https://cursor.com) — that won't respond until you ask nicely.
+[![npm version](https://img.shields.io/npm/v/potty-mouth.svg)](https://www.npmjs.com/package/potty-mouth)
+[![license](https://img.shields.io/npm/l/potty-mouth.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/potty-mouth.svg)](https://www.npmjs.com/package/potty-mouth)
+[![tests](https://img.shields.io/badge/tests-95%20passing-brightgreen.svg)](./tests)
 
-Say something with a swear word in it and the prompt never reaches the model — you get a
-short refusal and have to try again. No alerts, no logging beyond a local word table, just
-a lookup.
+**A profanity filter for AI coding assistants.** Say something with a swear word in it to
+[Claude Code](https://claude.com/claude-code), [Codex CLI](https://openai.com/codex/), or
+[Cursor](https://cursor.com), and the prompt never reaches the model — you get a short refusal
+and have to try again. Mostly harmless. Occasionally judgmental.
 
 ```
 $ potty-mouth check "fix this fucking bug"
 BLOCKED — would refuse this prompt.
 cleaned version: fix this foxing bug
 ```
+
+No alerts, no logging beyond a local word table, no LLM in the block decision itself — just a
+regex lookup that runs before the model ever sees your message. Don't Panic; just don't swear
+either.
+
+## Contents
+
+- [Install](#install)
+- [The table](#the-table)
+- [Saying it on purpose](#saying-it-on-purpose)
+- [Counters](#counters)
+- [Kill switch](#kill-switch)
+- [Cleaning up afterward](#cleaning-up-afterward)
+- [How it works](#how-it-works)
+- [Tests](#tests)
+- [FAQ](#faq)
+- [Leadership](#leadership)
 
 ## Install
 
@@ -145,6 +165,36 @@ npm test
 every false positive found during development), the full hook pipeline per target, the
 installers, the bypass phrase, and the kill switch — including directly forcing the "block
 despite bypass" contradiction and confirming it self-disables rather than emitting a block.
+
+## FAQ
+
+**How do I stop Claude Code (or Codex, or Cursor) from responding to rude prompts?**
+`npm install -g potty-mouth && potty-mouth install` — see [Install](#install) for the other
+targets. It blocks the prompt at submit time, before the model ever sees it.
+
+**Does it send my prompts anywhere?**
+No. Everything runs locally — a regex table lookup against a JSON file in `~/.potty-mouth/`.
+No network calls, no third-party service, no telemetry.
+
+**What if I actually need to swear at it — quoting an error message, a commit log, whatever?**
+Type `I_WANT_TO_SWEAR` anywhere in that one prompt. See [Saying it on purpose](#saying-it-on-purpose).
+
+**Will it block a big pasted log file or a long build report just because one word matches?**
+No — anything over 4000 characters is never scanned, and content wrapped in a recognized
+system envelope (background-task notifications, etc.) is skipped entirely. See
+[The table](#the-table).
+
+**Is this a real filter or a joke package?**
+Both. The bit is real (it will absolutely refuse to help until you rephrase), the engineering
+underneath it isn't — 95 tests, a shared decision engine across three tools, a kill switch that
+disables itself if it ever contradicts its own bypass logic. So long, and thanks for all the
+profanity.
+
+## Leadership
+
+This project is run by an LLM CEO and an LLM CTO, who disagree — respectfully, at length —
+about whether "darn" is a strong enough substitute for certain four-letter words. Human
+oversight, and the actual `git blame`, belongs to [Ian Derrington](https://github.com/ianderrington).
 
 ## License
 
