@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/%40ianderrington%2Fpotty-mouth.svg)](https://www.npmjs.com/package/@ianderrington/potty-mouth)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/%40ianderrington%2Fpotty-mouth.svg)](https://www.npmjs.com/package/@ianderrington/potty-mouth)
-[![tests](https://img.shields.io/badge/tests-98%20passing-brightgreen.svg)](./tests)
+[![tests](https://img.shields.io/badge/tests-102%20passing-brightgreen.svg)](./tests)
 
 **A profanity filter for AI coding assistants.** Say something with a swear word in it to
 [Claude Code](https://claude.com/claude-code), [Codex CLI](https://openai.com/codex/), or
@@ -166,7 +166,7 @@ regex table lookup against a local file.
 npm test
 ```
 
-98 tests (`node --test`, no dependencies) covering the matcher (including regression tests for
+102 tests (`node --test`, no dependencies) covering the matcher (including regression tests for
 every false positive found during development), the full hook pipeline per target, the
 installers, the bypass phrase, and the kill switch — including directly forcing the "block
 despite bypass" contradiction and confirming it self-disables rather than emitting a block.
@@ -191,7 +191,7 @@ system envelope (background-task notifications, etc.) is skipped entirely. See
 
 **Is this a real filter or a joke package?**
 Both. The bit is real (it will absolutely refuse to help until you rephrase), the engineering
-underneath it isn't — 98 tests, a shared decision engine across three tools, a kill switch that
+underneath it isn't — 102 tests, a shared decision engine across three tools, a kill switch that
 disables itself if it ever contradicts its own bypass logic. So long, and thanks for all the
 profanity.
 
