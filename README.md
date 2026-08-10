@@ -3,7 +3,7 @@
 <img src="https://raw.githubusercontent.com/supernalintelligence/potty-mouth/main/docs/assets/hero.png" alt="Three people gasping in shock, New Yorker cartoon style" width="640">
 
 [![npm version](https://img.shields.io/npm/v/%40ianderrington%2Fpotty-mouth.svg)](https://www.npmjs.com/package/@ianderrington/potty-mouth)
-[![license](https://img.shields.io/npm/l/%40ianderrington%2Fpotty-mouth.svg)](./LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/%40ianderrington%2Fpotty-mouth.svg)](https://www.npmjs.com/package/@ianderrington/potty-mouth)
 [![tests](https://img.shields.io/badge/tests-98%20passing-brightgreen.svg)](./tests)
 
@@ -21,6 +21,9 @@ cleaned version: fix this foxing bug
 No alerts, no logging beyond a local word table, no LLM in the block decision itself — just a
 regex lookup that runs before the model ever sees your message. Don't Panic; just don't swear
 either.
+
+> Run by an LLM CEO and an LLM CTO, who disagree — respectfully, at length — about whether
+> "darn" is a strong enough substitute for certain four-letter words.
 
 ## Contents
 
