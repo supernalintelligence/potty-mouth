@@ -18,6 +18,7 @@ Usage:
   potty-mouth check "<text>"       test a string against the table
   potty-mouth add <word> [swap]    add a word to your table (default: [removed])
     --by ai                        tag the addition as AI-added (default: user)
+    --force                        override the short-word/common-word safety guard
   potty-mouth remove <word>        remove a word from your table
   potty-mouth list                 show the full active table (seed + yours, tagged by who added it)
   potty-mouth stats                show block/bypass counts (total + per session)
@@ -68,12 +69,19 @@ async function main() {
     case 'add': {
       const byIdx = args.indexOf('--by');
       const addedBy = byIdx !== -1 ? args[byIdx + 1] : 'user';
-      const rest = byIdx !== -1 ? [...args.slice(0, byIdx), ...args.slice(byIdx + 2)] : args;
+      const withoutBy = byIdx !== -1 ? [...args.slice(0, byIdx), ...args.slice(byIdx + 2)] : args;
+      const force = withoutBy.includes('--force');
+      const rest = withoutBy.filter((a) => a !== '--force');
       const [word, ...swapParts] = rest;
-      if (!word) { console.error('Usage: potty-mouth add <word> [swap] [--by ai|user]'); process.exit(2); }
+      if (!word) { console.error('Usage: potty-mouth add <word> [swap] [--by ai|user] [--force]'); process.exit(2); }
       if (addedBy !== 'user' && addedBy !== 'ai') { console.error('--by must be "user" or "ai"'); process.exit(2); }
       const swap = swapParts.join(' ') || undefined;
-      addWord(word, swap, addedBy);
+      try {
+        addWord(word, swap, addedBy, { force });
+      } catch (e) {
+        console.error(e.message);
+        process.exit(2);
+      }
       console.log(`Added "${word}" -> "${swap ?? REMOVED}" (by ${addedBy})`);
       return;
     }

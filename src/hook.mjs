@@ -101,14 +101,31 @@ function emitContext(lines) {
   }));
 }
 
+// Entry point — deliberately never lets ANYTHING it does uncaught-crash the
+// process. A crashed hook process is undefined behavior from Claude Code's
+// side (unlike our own explicit "decision":"block", which is a documented,
+// understood outcome) — a permission error writing state, a corrupted
+// words.json hitting some code path we didn't anticipate, anything at all,
+// must fail OPEN (silently let the prompt through) rather than risk
+// interfering with a real conversation turn over our own bug. This is the
+// same principle as the JSON-parse fail-open below, just applied to the
+// whole function instead of one step of it.
 export async function runHook() {
+  try {
+    await runHookInner();
+  } catch {
+    // Swallow anything unexpected -> fail open, no stdout, exit 0.
+  }
+  process.exit(0);
+}
+
+async function runHookInner() {
   const raw = await readStdin();
   let input;
   try {
     input = JSON.parse(raw);
   } catch {
-    // Can't parse the hook payload -> fail open. Never block on our own bug.
-    process.exit(0);
+    return; // can't parse the payload -> fail open, handled by the outer wrapper's exit(0)
   }
 
   // Field name has drifted across Claude Code versions in the wild; accept
@@ -117,7 +134,7 @@ export async function runHook() {
   const sessionId = input.session_id;
 
   if (isSystemEnvelope(promptText) || promptText.length > MAX_SCANNED_LENGTH) {
-    process.exit(0); // not a human conversation turn -> never touch it
+    return; // not a human conversation turn -> never touch it
   }
 
   const usedBypass = promptText.includes(BYPASS_TOKEN);
@@ -130,7 +147,7 @@ export async function runHook() {
         decision: 'block',
         reason: pickRefusal(sessionBlocks),
       }));
-      process.exit(0);
+      return;
     }
   }
 
@@ -163,5 +180,4 @@ export async function runHook() {
   }
 
   emitContext(contextLines);
-  process.exit(0);
 }

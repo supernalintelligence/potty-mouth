@@ -42,8 +42,20 @@ export function buildStrictMatcher(words) {
   return new RegExp('\\b(' + sortedWords.map(escapeRegex).join('|') + ')\\b', 'gi');
 }
 
+// Trailing suffix a fuzzy root is allowed to be followed by and still count
+// as a match — e.g. "f*ck" + "ing" (a real conjugation). An UNBOUNDED
+// trailing \w* (the original design) would also let "cock" + "pit" match,
+// which is how cockpit/cocktail/dickens/prickly false-positived (2026-08-09)
+// even for roots later removed from SEED_FUZZY_ROOTS — this bound is
+// defense in depth for any root added in the future, not just today's.
+// Ends with a real \b so an unrecognized suffix (anything not in this list)
+// can never complete the match. Includes "ty" for the double-consonant
+// conjugation of roots ending in a single consonant (shit -> shitty,
+// slut -> slutty — "y" alone only spells the single-consonant misspelling).
+const FUZZY_SUFFIX = '(?:ing|ings|ers?|ed|heads?|holes?|ups?|ty|y|s)?\\b';
+
 export function buildFuzzyMatcher(roots) {
-  return new RegExp('\\b(?:' + roots.map(fuzzyWord).join('|') + ')\\w*', 'i');
+  return new RegExp('\\b(?:' + roots.map(fuzzyWord).join('|') + ')' + FUZZY_SUFFIX, 'i');
 }
 
 // A hit on EITHER matcher blocks. Strict alone already covers every plain

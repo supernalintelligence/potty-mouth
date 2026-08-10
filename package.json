@@ -6,6 +6,9 @@
   "bin": {
     "potty-mouth": "bin/potty-mouth.mjs"
   },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
   "files": [
     "bin",
     "src",

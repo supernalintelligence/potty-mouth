@@ -10,16 +10,21 @@ import os from 'node:os';
 
 export const REMOVED = '[removed]';
 
-// Roots eligible for obfuscation-tolerant (fuzzy) detection — see the header
-// comment in match.mjs for why this must stay small and curated rather than
-// being every key in SEED_WORDS: a fuzzy match only anchors a boundary at
-// the START, so a short/generic root here (ass, hell, damn, crap, piss)
-// would false-positive as a bare prefix of an unrelated word ("ass" inside
-// "associated"). Ported verbatim from the already-vetted list in
-// scripts/clean-transcripts.mjs's DETECT_ROOTS. Do not add a short root here
-// without checking it isn't a common-word prefix first.
+// Roots eligible for obfuscation-tolerant (fuzzy) detection. Kept small and
+// curated: match.mjs's fuzzy matcher only requires a boundary at the START
+// of a match plus a bounded, known-suffix allowlist at the end (see
+// FUZZY_SUFFIX in match.mjs) — so a root that's ALSO a common-word prefix
+// still risks a false positive even with that guard (e.g. "cock" + "y" is a
+// legal suffix match, and "cocky" is an ordinary word). Confirmed false
+// positives 2026-08-09: "cock" flagged cockpit/cocktail/cockroach/cocky,
+// "dick" flagged dickens, "prick" flagged prickly/prickle — all three
+// removed from this list for that reason (they're STILL caught via the
+// strict exact-word table in SEED_WORDS below, just not obfuscation-
+// tolerant). Originally ported from scripts/clean-transcripts.mjs's
+// DETECT_ROOTS, which has this same latent risk. Do not add a short root
+// here without checking it isn't a common-word prefix first.
 export const SEED_FUZZY_ROOTS = [
-  'fuck', 'shit', 'bitch', 'bastard', 'asshole', 'dick', 'cock', 'prick',
+  'fuck', 'shit', 'bitch', 'bastard', 'asshole',
   'cunt', 'slut', 'whore', 'faggot', 'nigger', 'nigga', 'retard', 'douche',
   'motherfucker', 'goddamn', 'bullshit',
 ];
@@ -98,9 +103,44 @@ export function loadWords() {
   return { ...SEED_WORDS, ...flatUser };
 }
 
-export function addWord(word, replacement, addedBy = 'user') {
+// Guards against turning the table into a footgun: a very short or
+// extremely common English word added here would use STRICT (safe,
+// double-boundary) matching, so it wouldn't false-positive as a substring —
+// but it WOULD then correctly block every literal standalone occurrence of
+// an everyday word, which is its own kind of disaster ("the" would block
+// nearly every prompt). Length alone isn't a perfect proxy (short ≠ common:
+// "yeet" is short and fine, "the" is short and catastrophic), so this pairs
+// a length floor with a small curated stopword list. `force: true` lets a
+// deliberate override through — the user is always in control, this just
+// makes sure it's a deliberate choice, not a typo.
+const MIN_WORD_LENGTH = 3;
+const COMMON_STOPWORDS = new Set([
+  'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had',
+  'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his',
+  'how', 'man', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy',
+  'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use', 'this', 'that',
+  'with', 'have', 'from', 'they', 'will', 'what', 'when', 'make', 'like',
+  'time', 'just', 'know', 'take', 'into', 'your', 'good', 'some', 'could',
+  'them', 'than', 'then', 'look', 'only', 'come', 'over', 'also', 'back',
+  'after', 'work', 'well', 'even', 'want', 'because', 'these', 'give',
+  'most',
+]);
+
+export function addWord(word, replacement, addedBy = 'user', { force = false } = {}) {
   const key = word.toLowerCase().trim();
   if (!key) throw new Error('word cannot be empty');
+  if (!force && key.length < MIN_WORD_LENGTH) {
+    throw new Error(
+      `"${key}" is shorter than ${MIN_WORD_LENGTH} characters — too easy to accidentally block ` +
+      `common text. Pass force: true (CLI: --force) if you really mean it.`,
+    );
+  }
+  if (!force && COMMON_STOPWORDS.has(key)) {
+    throw new Error(
+      `"${key}" is a very common English word — blocking it would break normal conversation. ` +
+      `Pass force: true (CLI: --force) if you really mean it.`,
+    );
+  }
   const userWords = loadUserWords();
   userWords[key] = { swap: replacement ?? REMOVED, addedBy, addedAt: new Date().toISOString() };
   saveUserWords(userWords);
