@@ -5,6 +5,7 @@
 import { loadWords, SEED_FUZZY_ROOTS } from './words.mjs';
 import { detect } from './match.mjs';
 import { recordBlock, recordBypass, takeUnnotified } from './state.mjs';
+import { isDisabled, disable } from './killswitch.mjs';
 
 // Explicit, deliberate override — type this anywhere in a prompt and
 // potty-mouth lets that prompt through untouched, on purpose, no matter
@@ -101,6 +102,46 @@ function emitContext(lines) {
   }));
 }
 
+// The SOLE gateway a block decision may ever be emitted through — every
+// call site must route through here, never write {"decision":"block"}
+// directly. Re-checks the bypass token independently of whatever upstream
+// logic decided to call this, so a FUTURE bug (a new detection path, a
+// broken condition, anything) that forgets to respect the bypass still
+// can't produce a real block while it's present — the invariant is
+// enforced here, once, not trusted to every caller.
+//
+// If it ever fires despite the bypass token being present, that's not a
+// user "sneaking past" anything (BYPASS_TOKEN is a literal substring check
+// against their own typed text — nothing to sneak past) — it means
+// potty-mouth's own logic has a contradiction it cannot explain. Rather
+// than keep blocking on logic that's already proven wrong once, this
+// disables the whole filter (word table stays intact, only the hook itself
+// goes inert) and tells Claude to flag it to the user with a bug-report ask.
+export function emitBlock(promptText, sessionId) {
+  if (promptText.includes(BYPASS_TOKEN)) {
+    disable(
+      'Automatic: a block decision was about to fire despite the bypass token being present. ' +
+      'This should be structurally impossible and indicates a real bug in potty-mouth.',
+      { automatic: true, promptExcerpt: promptText.slice(0, 200), sessionId },
+    );
+    emitContext([
+      '⚠️ potty-mouth just detected an internal contradiction it cannot explain (a block was about',
+      "to fire despite the user's explicit bypass phrase being present) and has AUTOMATICALLY",
+      'DISABLED ITSELF as a safety measure — it will not filter or block anything further until',
+      're-enabled. Please tell the user this happened and suggest they file a bug report against',
+      "potty-mouth (include what they typed, if they're willing) — run `potty-mouth status` for",
+      'details. Run `potty-mouth enable` and then `potty-mouth install` once the underlying bug is',
+      'understood and fixed.',
+    ]);
+    return;
+  }
+  const { sessionBlocks } = recordBlock(sessionId);
+  process.stdout.write(JSON.stringify({
+    decision: 'block',
+    reason: pickRefusal(sessionBlocks),
+  }));
+}
+
 // Entry point — deliberately never lets ANYTHING it does uncaught-crash the
 // process. A crashed hook process is undefined behavior from Claude Code's
 // side (unlike our own explicit "decision":"block", which is a documented,
@@ -120,6 +161,8 @@ export async function runHook() {
 }
 
 async function runHookInner() {
+  if (isDisabled()) return; // fully inert while disabled — checked first, before anything else
+
   const raw = await readStdin();
   let input;
   try {
@@ -142,11 +185,7 @@ async function runHookInner() {
   if (!usedBypass) {
     const words = loadWords();
     if (detect(promptText, words, SEED_FUZZY_ROOTS)) {
-      const { sessionBlocks } = recordBlock(sessionId);
-      process.stdout.write(JSON.stringify({
-        decision: 'block',
-        reason: pickRefusal(sessionBlocks),
-      }));
+      emitBlock(promptText, sessionId);
       return;
     }
   }

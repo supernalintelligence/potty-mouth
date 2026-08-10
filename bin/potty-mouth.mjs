@@ -5,6 +5,7 @@ import { loadWords, loadUserWords, addWord, removeWord, REMOVED, SEED_FUZZY_ROOT
 import { detect, cleanText } from '../src/match.mjs';
 import { cleanPath } from '../src/clean.mjs';
 import { getStats, resetStats } from '../src/state.mjs';
+import { isDisabled, getDisabledInfo, disable, enable } from '../src/killswitch.mjs';
 
 const [, , cmd, ...args] = process.argv;
 
@@ -26,11 +27,16 @@ Usage:
   potty-mouth clean <path>         clean up a file or directory afterward
     --dry-run                      report only, write nothing
     --backup                       write <file>.bak before modifying
+    --ext <suffix>                 only touch files ending in <suffix> (dir mode)
+  potty-mouth disable [reason]     kill switch — go fully inert + uninstall (word table untouched)
+  potty-mouth enable               turn back on (re-run \`install\` if it was also uninstalled)
+  potty-mouth status               show enabled/disabled state and why
 
   Type I_WANT_TO_SWEAR anywhere in a prompt to deliberately bypass the
   filter for that one prompt. Tracked separately from blocks — see
-  \`potty-mouth stats\`.
-    --ext <suffix>                 only touch files ending in <suffix> (dir mode)
+  \`potty-mouth stats\`. If a block is ever emitted despite this token being
+  present, potty-mouth treats that as an unexplainable internal bug and
+  automatically disables itself — see \`potty-mouth status\`.
 `);
 }
 
@@ -42,6 +48,7 @@ async function main() {
     case 'install': {
       const r = install();
       console.log(r.changed ? `Installed. Wired into ${r.path}` : `Already installed in ${r.path}`);
+      if (isDisabled()) console.log('Note: potty-mouth is currently DISABLED (see `potty-mouth status`) — run `potty-mouth enable` too, or it will stay inert despite being installed.');
       return;
     }
 
@@ -137,6 +144,41 @@ async function main() {
       const changed = results.filter((r) => r.changed);
       console.log(`Scanned ${results.length} file(s), ${changed.length} modified${opts.dryRun ? ' (dry run)' : ''}.`);
       for (const r of changed) console.log(`  ${r.file} (${r.swaps} swap${r.swaps === 1 ? '' : 's'})`);
+      return;
+    }
+
+    case 'disable': {
+      const reason = args.join(' ') || 'Manual — user ran `potty-mouth disable`.';
+      disable(reason, { automatic: false });
+      console.log('Disabled. The hook is now fully inert and has been uninstalled from settings.json.');
+      console.log('The word table and counters are untouched. Run `potty-mouth enable` (then `install`) to turn it back on.');
+      return;
+    }
+
+    case 'enable': {
+      const was = getDisabledInfo();
+      const cleared = enable();
+      if (!was) { console.log('Was not disabled — nothing to do.'); return; }
+      console.log(`Re-enabled${cleared ? '' : ' (flag was already clear)'}.`);
+      console.log('If it was auto-uninstalled, run `potty-mouth install` to wire it back into settings.json.');
+      return;
+    }
+
+    case 'status': {
+      const disabled = isDisabled();
+      if (!disabled) {
+        console.log('Enabled — actively filtering.');
+      } else {
+        const info = getDisabledInfo();
+        console.log('DISABLED' + (info?.automatic ? ' (automatic — potty-mouth disabled itself)' : ' (manual)') + '.');
+        if (info?.disabledAt) console.log(`  since: ${info.disabledAt}`);
+        if (info?.reason) console.log(`  reason: ${info.reason}`);
+        if (info?.promptExcerpt) console.log(`  prompt excerpt (for a bug report): ${JSON.stringify(info.promptExcerpt)}`);
+        if (info?.sessionId) console.log(`  session: ${info.sessionId}`);
+        if (info?.automatic) {
+          console.log('  This should never happen — please file a bug report if you see this.');
+        }
+      }
       return;
     }
 
