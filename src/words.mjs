@@ -10,6 +10,20 @@ import os from 'node:os';
 
 export const REMOVED = '[removed]';
 
+// Roots eligible for obfuscation-tolerant (fuzzy) detection — see the header
+// comment in match.mjs for why this must stay small and curated rather than
+// being every key in SEED_WORDS: a fuzzy match only anchors a boundary at
+// the START, so a short/generic root here (ass, hell, damn, crap, piss)
+// would false-positive as a bare prefix of an unrelated word ("ass" inside
+// "associated"). Ported verbatim from the already-vetted list in
+// scripts/clean-transcripts.mjs's DETECT_ROOTS. Do not add a short root here
+// without checking it isn't a common-word prefix first.
+export const SEED_FUZZY_ROOTS = [
+  'fuck', 'shit', 'bitch', 'bastard', 'asshole', 'dick', 'cock', 'prick',
+  'cunt', 'slut', 'whore', 'faggot', 'nigger', 'nigga', 'retard', 'douche',
+  'motherfucker', 'goddamn', 'bullshit',
+];
+
 export const SEED_WORDS = {
   // f-word family -> fox
   fuck: 'fox', fucks: 'foxes', fucked: 'foxed', fucking: 'foxing',

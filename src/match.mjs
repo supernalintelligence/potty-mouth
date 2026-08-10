@@ -1,8 +1,21 @@
-// Obfuscation-tolerant word matching. Same technique as the transcript
-// cleaner this was ported from: strict word boundaries (so "class" is never
-// touched for containing "ass" — no Scunthorpe problem), leetspeak-aware,
-// tolerant of a single mask symbol or separator between interior letters
-// (f*ck, sh!t, f.u.c.k) but not the first/last letter of a word.
+// Two independent matchers, deliberately not merged into one:
+//
+//   STRICT  — full \b(word)\b boundary on both sides, built from the WHOLE
+//             word table (seed + user additions). Safe for any word,
+//             including short/common-prefix ones like "ass" or "hell",
+//             because both boundaries must hold — "associated" never
+//             matches "ass" since there's no boundary between "ass" and
+//             "ociated".
+//
+//   FUZZY   — obfuscation-tolerant (leetspeak, mask symbols, separators —
+//             f*ck, sh!t, f.u.c.k), but only anchored at the START of a
+//             match, not the end (it needs a trailing \w* to still catch
+//             conjugations like "fucking" from a bare "fuck" root). That
+//             means a short/generic root WOULD false-positive as a bare
+//             prefix of an unrelated word ("ass" inside "associated" is
+//             exactly this bug — confirmed 2026-08-09). So fuzzy matching
+//             only ever runs against a small, deliberately curated root
+//             list (see words.mjs SEED_FUZZY_ROOTS) — never the full table.
 const LEET = {
   a: '[a@4]', b: '[b8]', e: '[e3]', g: '[g9]', i: '[i1!|]', l: '[l1|]',
   o: '[o0]', s: '[s$5]', t: '[t7]', u: '[uv]',
@@ -24,24 +37,23 @@ function fuzzyWord(word) {
     .join('[\\W_]{0,2}');
 }
 
-// Builds a case-insensitive matcher for the given word table. Returns both a
-// strict exact matcher (used for the deterministic swap) and a fuzzy
-// detector (used for block/detect decisions, since a hard block only needs
-// to know something matched, not clean-replace it in place).
-export function buildMatchers(words) {
+export function buildStrictMatcher(words) {
   const sortedWords = Object.keys(words).sort((a, b) => b.length - a.length);
-  const strict = new RegExp('\\b(' + sortedWords.map(escapeRegex).join('|') + ')\\b', 'gi');
-  const fuzzy = new RegExp(
-    '\\b(?:' + sortedWords.map(fuzzyWord).join('|') + ')\\w*',
-    'i',
-  );
-  return { strict, fuzzy };
+  return new RegExp('\\b(' + sortedWords.map(escapeRegex).join('|') + ')\\b', 'gi');
 }
 
-export function detect(text, words) {
+export function buildFuzzyMatcher(roots) {
+  return new RegExp('\\b(?:' + roots.map(fuzzyWord).join('|') + ')\\w*', 'i');
+}
+
+// A hit on EITHER matcher blocks. Strict alone already covers every plain
+// (non-obfuscated) instance of every table word, including short ones —
+// fuzzy only adds obfuscation tolerance for the curated root subset.
+export function detect(text, words, fuzzyRoots = []) {
   if (!text || typeof text !== 'string') return false;
-  const { fuzzy } = buildMatchers(words);
-  return fuzzy.test(text);
+  if (buildStrictMatcher(words).test(text)) return true;
+  if (fuzzyRoots.length > 0 && buildFuzzyMatcher(fuzzyRoots).test(text)) return true;
+  return false;
 }
 
 function applyCase(original, replacement, removedToken) {
@@ -57,7 +69,7 @@ function applyCase(original, replacement, removedToken) {
 // fuzzy is for detection; blindly rewriting an obfuscated match risks
 // mangling text the same way whole-message LLM rewrites did elsewhere).
 export function cleanText(text, words, removedToken) {
-  const { strict } = buildMatchers(words);
+  const strict = buildStrictMatcher(words);
   let changed = false;
   let swaps = 0;
   const result = text.replace(strict, (match) => {

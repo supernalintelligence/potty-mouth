@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { runHook } from '../src/hook.mjs';
 import { install, uninstall } from '../src/install.mjs';
-import { loadWords, loadUserWords, addWord, removeWord, REMOVED } from '../src/words.mjs';
+import { loadWords, loadUserWords, addWord, removeWord, REMOVED, SEED_FUZZY_ROOTS } from '../src/words.mjs';
 import { detect, cleanText } from '../src/match.mjs';
 import { cleanPath } from '../src/clean.mjs';
 import { getStats, resetStats } from '../src/state.mjs';
@@ -20,11 +20,15 @@ Usage:
     --by ai                        tag the addition as AI-added (default: user)
   potty-mouth remove <word>        remove a word from your table
   potty-mouth list                 show the full active table (seed + yours, tagged by who added it)
-  potty-mouth stats                show block counts (total + per session)
-  potty-mouth reset                zero out the block counter (word table is untouched)
+  potty-mouth stats                show block/bypass counts (total + per session)
+  potty-mouth reset                zero out the counters (word table is untouched)
   potty-mouth clean <path>         clean up a file or directory afterward
     --dry-run                      report only, write nothing
     --backup                       write <file>.bak before modifying
+
+  Type I_WANT_TO_SWEAR anywhere in a prompt to deliberately bypass the
+  filter for that one prompt. Tracked separately from blocks — see
+  \`potty-mouth stats\`.
     --ext <suffix>                 only touch files ending in <suffix> (dir mode)
 `);
 }
@@ -50,7 +54,7 @@ async function main() {
       const text = args.join(' ');
       if (!text) { console.error('Usage: potty-mouth check "<text>"'); process.exit(2); }
       const words = loadWords();
-      const hit = detect(text, words);
+      const hit = detect(text, words, SEED_FUZZY_ROOTS);
       console.log(hit ? 'BLOCKED — would refuse this prompt.' : 'clean — would pass through.');
       if (hit) {
         const { changed, text: cleaned } = cleanText(text, words, REMOVED);
@@ -97,19 +101,19 @@ async function main() {
     case 'stats': {
       const stats = getStats();
       const sessionCount = Object.keys(stats.sessions).length;
-      console.log(`Total blocks: ${stats.totalBlocks} across ${sessionCount} session${sessionCount === 1 ? '' : 's'}.`);
+      console.log(`Total blocks: ${stats.totalBlocks}, bypasses: ${stats.totalBypasses} — across ${sessionCount} session${sessionCount === 1 ? '' : 's'}.`);
       const recent = Object.entries(stats.sessions)
-        .sort((a, b) => new Date(b[1].lastBlockedAt) - new Date(a[1].lastBlockedAt))
+        .sort((a, b) => new Date(b[1].lastActivityAt) - new Date(a[1].lastActivityAt))
         .slice(0, 5);
       for (const [id, s] of recent) {
-        console.log(`  ${id.slice(0, 8)}...  ${s.blocks} block${s.blocks === 1 ? '' : 's'}  last: ${s.lastBlockedAt}`);
+        console.log(`  ${id.slice(0, 8)}...  ${s.blocks} block${s.blocks === 1 ? '' : 's'}, ${s.bypasses ?? 0} bypass${(s.bypasses ?? 0) === 1 ? '' : 'es'}  last: ${s.lastActivityAt}`);
       }
       return;
     }
 
     case 'reset': {
       const before = resetStats();
-      console.log(`Reset. Was at ${before.totalBlocks} total block(s) across ${Object.keys(before.sessions).length} session(s). Word table untouched.`);
+      console.log(`Reset. Was at ${before.totalBlocks} block(s) and ${before.totalBypasses} bypass(es) across ${Object.keys(before.sessions).length} session(s). Word table untouched.`);
       return;
     }
 

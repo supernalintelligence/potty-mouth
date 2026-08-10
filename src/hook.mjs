@@ -2,9 +2,43 @@
 // the prompt against the word table, and — on a match — blocks the prompt
 // from ever reaching the model. No alarms, no logging beyond the local
 // table and counter, just a lookup and a refusal.
-import { loadWords } from './words.mjs';
+import { loadWords, SEED_FUZZY_ROOTS } from './words.mjs';
 import { detect } from './match.mjs';
-import { recordBlock, takeUnnotified } from './state.mjs';
+import { recordBlock, recordBypass, takeUnnotified } from './state.mjs';
+
+// Explicit, deliberate override — type this anywhere in a prompt and
+// potty-mouth lets that prompt through untouched, on purpose, no matter
+// what it contains. Exact case-sensitive token so it can't trigger by
+// accident. This is the escalation past the word table itself: the user
+// (a human typing into their own terminal) is always allowed to override
+// their own filter — potty-mouth just makes sure Claude is told it happened
+// rather than silently letting profanity through unremarked.
+const BYPASS_TOKEN = 'I_WANT_TO_SWEAR';
+
+// The UserPromptSubmit channel isn't exclusively human keystrokes — Claude
+// Code also delivers things like background-task completion reports through
+// it, wrapped in a recognized envelope tag, as if they were the next typed
+// message. Confirmed incident 2026-08-09: a multi-thousand-character
+// <task-notification> build report got blocked over an incidental word
+// match, destroying real operational content nobody "asked nicely" for
+// (the whole premise doesn't apply to non-human content). Never run word
+// detection against a recognized system envelope — pass it through
+// untouched, no counting, no context injection, this isn't a conversation
+// turn.
+const SYSTEM_ENVELOPE_TAGS = ['task-notification', 'system-reminder'];
+
+function isSystemEnvelope(text) {
+  const trimmed = text.trimStart();
+  return SYSTEM_ENVELOPE_TAGS.some((tag) => trimmed.startsWith(`<${tag}>`));
+}
+
+// Defense in depth, independent of the tag check above: a human typing
+// profanity at Claude is virtually always short. A very long prompt is far
+// more likely to be pasted technical content (logs, reports, code) than a
+// live conversational message, and the cost of a false positive on a huge
+// paste (destroying content the user needed) vastly outweighs the value of
+// blocking it. Detection simply never runs above this length.
+const MAX_SCANNED_LENGTH = 4000;
 
 // Escalating, Hitchhiker's Guide-flavored refusals. Tiers key off how many
 // times THIS session has been blocked so far — a repeat offender gets
@@ -60,6 +94,13 @@ function readStdin() {
   });
 }
 
+function emitContext(lines) {
+  if (lines.length === 0) return;
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: lines.join(' ') },
+  }));
+}
+
 export async function runHook() {
   const raw = await readStdin();
   let input;
@@ -75,34 +116,52 @@ export async function runHook() {
   const promptText = input.prompt ?? input.user_input ?? '';
   const sessionId = input.session_id;
 
-  const words = loadWords();
-
-  if (!detect(promptText, words)) {
-    // Clean prompt — let it through, but if this session had a block since
-    // we last mentioned it, tell Claude once (not every turn) so it has
-    // context and knows it's allowed to grow the table itself.
-    const info = takeUnnotified(sessionId);
-    if (info) {
-      const context = [
-        `potty-mouth blocked ${info.delta} of the user's prompt(s) just now`,
-        `(this session: ${info.sessionBlocks}, all-time: ${info.totalBlocks}).`,
-        `You may grow its word table yourself if you notice profanity or`,
-        `hostile language that slipped through: \`potty-mouth add <word> [swap] --by ai\`.`,
-        `The user is always fully in control — they can see everything with`,
-        `\`potty-mouth list\` (AI additions are tagged), remove any entry with`,
-        `\`potty-mouth remove <word>\`, or wipe the block counter with \`potty-mouth reset\`.`,
-      ].join(' ');
-      process.stdout.write(JSON.stringify({
-        hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context },
-      }));
-    }
-    process.exit(0);
+  if (isSystemEnvelope(promptText) || promptText.length > MAX_SCANNED_LENGTH) {
+    process.exit(0); // not a human conversation turn -> never touch it
   }
 
-  const { sessionBlocks } = recordBlock(sessionId);
-  process.stdout.write(JSON.stringify({
-    decision: 'block',
-    reason: pickRefusal(sessionBlocks),
-  }));
+  const usedBypass = promptText.includes(BYPASS_TOKEN);
+
+  if (!usedBypass) {
+    const words = loadWords();
+    if (detect(promptText, words, SEED_FUZZY_ROOTS)) {
+      const { sessionBlocks } = recordBlock(sessionId);
+      process.stdout.write(JSON.stringify({
+        decision: 'block',
+        reason: pickRefusal(sessionBlocks),
+      }));
+      process.exit(0);
+    }
+  }
+
+  // Allowed — either clean, or the user explicitly overrode the filter.
+  // Either way, make sure Claude has context rather than staying silent.
+  const contextLines = [];
+
+  if (usedBypass) {
+    const { sessionBypasses, totalBypasses } = recordBypass(sessionId);
+    contextLines.push(
+      `The user just typed the potty-mouth bypass phrase (${BYPASS_TOKEN}) — this`,
+      `means they deliberately chose to speak freely this turn; anything in this`,
+      `prompt was intentionally let through, not a filter failure`,
+      `(bypasses this session: ${sessionBypasses}, all-time: ${totalBypasses}).`,
+      `Respond normally.`,
+    );
+  }
+
+  const info = takeUnnotified(sessionId);
+  if (info) {
+    contextLines.push(
+      `potty-mouth blocked ${info.delta} of the user's earlier prompt(s)`,
+      `(this session: ${info.sessionBlocks}, all-time: ${info.totalBlocks}).`,
+      `You may grow its word table yourself if you notice profanity or hostile`,
+      `language that slipped through: \`potty-mouth add <word> [swap] --by ai\`.`,
+      `The user is always fully in control — they can see everything with`,
+      `\`potty-mouth list\` (AI additions are tagged), remove any entry with`,
+      `\`potty-mouth remove <word>\`, or wipe the block counter with \`potty-mouth reset\`.`,
+    );
+  }
+
+  emitContext(contextLines);
   process.exit(0);
 }
