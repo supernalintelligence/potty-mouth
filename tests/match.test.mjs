@@ -74,6 +74,20 @@ test('regression 2026-08-09: fuzzy detector no longer flags common words via pre
   }
 });
 
+test('regression 2026-08-20: numbered list items no longer false-positive via mask+whitespace collision', () => {
+  // "5. it should yes" read as leet '5'->s, mask "."->stand-in for 'h', a
+  // normal separator " ", then "it" -> i+t: an accidental obfuscated match
+  // for the "shit" fuzzy root. Any numbered-list sentence shaped like
+  // "<digit>. <word starting with a letter that continues the root>" was at
+  // risk the same way.
+  const innocent = [
+    '5. it should yes', '5. it should yes.', 'talk about it 5. it works',
+  ];
+  for (const s of innocent) {
+    assert.equal(detect(s, SEED_WORDS, SEED_FUZZY_ROOTS), false, `should not flag "${s}"`);
+  }
+});
+
 test('detect: a root that is ALSO a common-word prefix is still caught as a bare/plain word via strict', () => {
   // cock/dick/prick were removed from FUZZY roots but remain in the STRICT
   // full table, so a plain (non-obfuscated) standalone use is still caught.

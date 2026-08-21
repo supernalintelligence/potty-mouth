@@ -26,15 +26,33 @@ function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Separator allowed between two fuzzy-matched letters. Whitespace-tolerant,
+// since real evasion spaces letters out ("f u c k") -- see the fuzzy-root
+// sanity test suite.
+const SEP = '[\\W_]{0,2}';
+// Separator allowed ONLY right after a MASK symbol has stood in for a whole
+// letter (f*ck, sh!t). Punctuation-only, no whitespace: real obfuscation
+// packs the substitute symbol tight against its neighbors, never leaving a
+// real word-gap after it. Without this split, ordinary prose punctuation
+// followed by a space (a numbered list item, "5. it") can read as
+// "leet-digit letter, mask-substituted letter, then a normal word-gap" --
+// an accidental match for a real fuzzy root. Confirmed 2026-08-20: "5. it"
+// matched "shit" (5->s, "."->mask-for-h, " "->separator, "it"->i+t).
+const TIGHT_SEP = '[^\\w\\s]{0,1}';
+
 function fuzzyWord(word) {
   const chars = word.split('');
+  const last = chars.length - 1;
   return chars
     .map((ch, i) => {
       const base = LEET[ch.toLowerCase()] || escapeRegex(ch);
-      const isInterior = i > 0 && i < chars.length - 1;
-      return isInterior ? `(?:${base}|${MASK})` : `(?:${base})`;
+      const isInterior = i > 0 && i < last;
+      const trailingSep = i < last ? SEP : '';
+      if (!isInterior) return `(?:${base})${trailingSep}`;
+      const trailingTightSep = i < last ? TIGHT_SEP : '';
+      return `(?:(?:${base})${trailingSep}|(?:${MASK})${trailingTightSep})`;
     })
-    .join('[\\W_]{0,2}');
+    .join('');
 }
 
 export function buildStrictMatcher(words) {
