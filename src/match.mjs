@@ -28,8 +28,16 @@ function escapeRegex(s) {
 
 // Separator allowed between two fuzzy-matched letters. Whitespace-tolerant,
 // since real evasion spaces letters out ("f u c k") -- see the fuzzy-root
-// sanity test suite.
-const SEP = '[\\W_]{0,2}';
+// sanity test suite. Excludes closing delimiters ()]}"'`) -- these almost
+// always terminate a real preceding token rather than serving as mid-word
+// evasion punctuation, so allowing them let SEP bridge across a genuine
+// word boundary. Confirmed 2026-08-23: "DB(s) hit" matched the "shit" root
+// (s -> the literal 's' in "(s)", SEP -> ") ", h/i/t -> the unrelated next
+// word "hit") -- the same class of bug as the 2026-08-20 TIGHT_SEP fix
+// below, just via the plain-letter SEP path instead of the mask-substitution
+// path. No existing obfuscation pattern (f*ck, sh!t, f.u.c.k, f u c k, etc.)
+// uses a closing delimiter as a separator, so this excludes nothing real.
+const SEP = '[^\\w)\\]}"\'`]{0,2}';
 // Separator allowed ONLY right after a MASK symbol has stood in for a whole
 // letter (f*ck, sh!t). Punctuation-only, no whitespace: real obfuscation
 // packs the substitute symbol tight against its neighbors, never leaving a

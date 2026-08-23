@@ -88,6 +88,24 @@ test('regression 2026-08-20: numbered list items no longer false-positive via ma
   }
 });
 
+test('regression 2026-08-23: closing-delimiter + space no longer bridges two real words', () => {
+  // "DB(s) hit the..." read as: 's' (literal, end of "(s)"), SEP -> ") "
+  // (closing paren + space), then "hit" -> h+i+t: an accidental obfuscated
+  // match for the "shit" fuzzy root, spanning the end of one real word and
+  // the start of a completely unrelated next word. Same bug class as the
+  // 2026-08-20 regression above, via the plain-letter SEP path instead of
+  // the mask-substitution TIGHT_SEP path.
+  const innocent = [
+    'DB(s) hit the registry',
+    'board DB(s) hit the structural registry fallback',
+    'the list(s) it references',
+    'file(s) it touched',
+  ];
+  for (const s of innocent) {
+    assert.equal(detect(s, SEED_WORDS, SEED_FUZZY_ROOTS), false, `should not flag "${s}"`);
+  }
+});
+
 test('detect: a root that is ALSO a common-word prefix is still caught as a bare/plain word via strict', () => {
   // cock/dick/prick were removed from FUZZY roots but remain in the STRICT
   // full table, so a plain (non-obfuscated) standalone use is still caught.
