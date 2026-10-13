@@ -106,6 +106,27 @@ test('regression 2026-08-23: closing-delimiter + space no longer bridges two rea
   }
 });
 
+test('regression 2026-10-13: file extension + space no longer reads as spaced-out evasion', () => {
+  // "runme.sh it should work" read as "sh it" -> the "shit" fuzzy root: the
+  // '.' before "sh" counted as a word boundary, and SEP allows a space
+  // between letters ("s h i t"). A '.', '/', '\' or '-' before the match is a
+  // file extension, a path or a flag, never the start of an obfuscated word.
+  const innocent = [
+    "why don't you just do runme.sh it should work",
+    'run BUILDME.sh it should finish',
+    'call scripts/dev.sh it works',
+    'use install.sh it needs root',
+    'bash -sh it',
+  ];
+  for (const s of innocent) {
+    assert.equal(detect(s, SEED_WORDS, SEED_FUZZY_ROOTS), false, `should not flag "${s}"`);
+  }
+  // Real obfuscation at the start of a word is still caught.
+  for (const s of ['what a sh it', 'this is sh!t', 'that s h i t again', 'f u c k this']) {
+    assert.equal(detect(s, SEED_WORDS, SEED_FUZZY_ROOTS), true, `should flag "${s}"`);
+  }
+});
+
 test('detect: a root that is ALSO a common-word prefix is still caught as a bare/plain word via strict', () => {
   // cock/dick/prick were removed from FUZZY roots but remain in the STRICT
   // full table, so a plain (non-obfuscated) standalone use is still caught.

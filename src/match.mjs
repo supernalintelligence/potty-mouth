@@ -81,7 +81,12 @@ export function buildStrictMatcher(words) {
 const FUZZY_SUFFIX = '(?:ing|ings|ers?|ed|heads?|holes?|ups?|ty|y|s)?\\b';
 
 export function buildFuzzyMatcher(roots) {
-  return new RegExp('\\b(?:' + roots.map(fuzzyWord).join('|') + ')' + FUZZY_SUFFIX, 'i');
+  // Start boundary: not right after a word char, '.', '/', '\' or '-'. A '.'
+  // before the match is a file extension, a '/' or '\' a path, a '-' a flag.
+  // Without this, "runme.sh it should work" read as the spaced-out evasion
+  // "sh it" for the "shit" root. Plain (non-obfuscated) forms like "wow.shit"
+  // are still caught by the strict matcher.
+  return new RegExp('(?<![\\w./\\\\-])(?:' + roots.map(fuzzyWord).join('|') + ')' + FUZZY_SUFFIX, 'i');
 }
 
 // A hit on EITHER matcher blocks. Strict alone already covers every plain
