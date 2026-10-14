@@ -81,12 +81,26 @@ export function buildStrictMatcher(words) {
 const FUZZY_SUFFIX = '(?:ing|ings|ers?|ed|heads?|holes?|ups?|ty|y|s)?\\b';
 
 export function buildFuzzyMatcher(roots) {
-  // Start boundary: not right after a word char, '.', '/', '\' or '-'. A '.'
-  // before the match is a file extension, a '/' or '\' a path, a '-' a flag.
-  // Without this, "runme.sh it should work" read as the spaced-out evasion
-  // "sh it" for the "shit" root. Plain (non-obfuscated) forms like "wow.shit"
-  // are still caught by the strict matcher.
-  return new RegExp('(?<![\\w./\\\\-])(?:' + roots.map(fuzzyWord).join('|') + ')' + FUZZY_SUFFIX, 'i');
+  return new RegExp('\\b(?:' + roots.map(fuzzyWord).join('|') + ')' + FUZZY_SUFFIX, 'i');
+}
+
+// A fuzzy match that SPANS WHITESPACE ("sh it") and starts right after '.', '/', '\' or '-' is a
+// file extension, a path or a flag followed by a word ("runme.sh it should work", "-sh it"), not
+// a spaced-out evasion. Matches without internal whitespace ("f*ck", "ok.f*ck it", "no-sh!t",
+// "f.u.c.k") are still caught after any of those characters, so obfuscation is not hidden by
+// prefixing it with punctuation. Plain forms are caught by the strict matcher regardless.
+function fuzzyHit(text, roots) {
+  const re = new RegExp(buildFuzzyMatcher(roots).source, 'gi');
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const prev = m.index > 0 ? text[m.index - 1] : '';
+    if (prev !== '' && './\\-'.includes(prev) && /\s/.test(m[0])) {
+      re.lastIndex = m.index + 1;
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
 
 // A hit on EITHER matcher blocks. Strict alone already covers every plain
@@ -95,7 +109,7 @@ export function buildFuzzyMatcher(roots) {
 export function detect(text, words, fuzzyRoots = []) {
   if (!text || typeof text !== 'string') return false;
   if (buildStrictMatcher(words).test(text)) return true;
-  if (fuzzyRoots.length > 0 && buildFuzzyMatcher(fuzzyRoots).test(text)) return true;
+  if (fuzzyRoots.length > 0 && fuzzyHit(text, fuzzyRoots)) return true;
   return false;
 }
 

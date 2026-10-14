@@ -127,6 +127,18 @@ test('regression 2026-10-13: file extension + space no longer reads as spaced-ou
   }
 });
 
+test('regression 2026-10-13b: obfuscation prefixed by punctuation is still caught', () => {
+  // The first version of the file-extension fix put a lookbehind on the whole fuzzy matcher, which
+  // also hid obfuscated words that follow '.', '/', '-' or a word char ("ok.f*ck it", "no-sh!t").
+  // Only a match that spans whitespace is ignored after those characters.
+  const bad = [
+    'ok.f*ck it', 'yeah.sh1t', 'no-sh!t', 'and/f*ck', '--f*ck', 'what.f.u.c.k', 'this is bad.sh!t here',
+  ];
+  for (const s of bad) {
+    assert.equal(detect(s, SEED_WORDS, SEED_FUZZY_ROOTS), true, `should flag "${s}"`);
+  }
+});
+
 test('detect: a root that is ALSO a common-word prefix is still caught as a bare/plain word via strict', () => {
   // cock/dick/prick were removed from FUZZY roots but remain in the STRICT
   // full table, so a plain (non-obfuscated) standalone use is still caught.
